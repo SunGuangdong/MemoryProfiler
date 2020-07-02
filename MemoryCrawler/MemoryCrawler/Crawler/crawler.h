@@ -165,7 +165,7 @@ public:
     void findMObject(address_t address);
     void findNObject(address_t address);
     
-    void dumpRepeatedObjects(int32_t typeIndex, int32_t condition = 2);
+    void dumpRepeatedObjects(int32_t typeIndex, int32_t condition = 2, int32_t limit=-1);
     
     void dumpUnbalancedEvents(MemoryState state);
     void listMulticastDelegates();
@@ -229,7 +229,7 @@ public:
     void dumpSubclassesOf(int32_t typeIndex);
     
     void compare(MemorySnapshotCrawler &crawler);
-    
+    void compare2(MemorySnapshotCrawler &crawler1, MemorySnapshotCrawler &crawler2);
     ~MemorySnapshotCrawler();
     
 private:

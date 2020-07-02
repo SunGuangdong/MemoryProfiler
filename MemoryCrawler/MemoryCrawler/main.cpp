@@ -147,10 +147,23 @@ void processMemorySnapshot(const char * filepath)
             readCommandOptions(command, [&](std::vector<const char *> &options)
                                {
                 if (options.size() == 1) {return;}
-                PackedMemorySnapshot __snapshot;
-                MemorySnapshotCrawler crawler(&deserialize(options[1], __snapshot));
-                crawler.crawl();
-                mainCrawler.compare(crawler);
+                PackedMemorySnapshot __snapshot1;
+                MemorySnapshotCrawler crawler1(&deserialize(options[1], __snapshot1));
+                crawler1.crawl();
+                
+                if(options.size() == 3)
+                {
+                    PackedMemorySnapshot __snapshot2;
+                    MemorySnapshotCrawler crawler2(&deserialize(options[2], __snapshot2));
+                    crawler2.crawl();
+                    
+                    mainCrawler.compare2(crawler1, crawler2);
+                }else
+                {
+                    mainCrawler.compare(crawler1);
+                }
+                
+                
             });
         }
         else if (strbeg(command, "uuid"))

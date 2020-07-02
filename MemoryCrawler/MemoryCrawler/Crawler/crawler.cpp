@@ -122,6 +122,126 @@ void MemorySnapshotCrawler::prepare()
     __sampler.end();
 }
 
+void MemorySnapshotCrawler::compare2(MemorySnapshotCrawler &crawler1, MemorySnapshotCrawler &crawler2)
+{
+    //S1: crawler1, S2:crawler2, S3:this
+    //Find S2 and S3 as B2
+    std::unordered_map<address_t, string> S2_container;
+    for (auto i = 0; i < crawler2.managedObjects.size(); i++)
+    {
+        auto &mo = crawler2.managedObjects[i];
+		
+        if (!mo.isValueType)
+        {
+            auto &type = crawler2.snapshot->typeDescriptions->items[mo.typeIndex];
+            
+            S2_container.insert(pair<address_t, string>(mo.address, type.name));
+        }
+    }
+    
+    std::unordered_map<address_t, string> B2_container;
+    for (auto i = 0; i < managedObjects.size(); i++)
+    {
+        auto &mo = managedObjects[i];
+        if (!mo.isValueType)
+        {
+            auto &type = snapshot->typeDescriptions->items[mo.typeIndex];
+            auto iter = S2_container.find(mo.address);
+            if( iter != S2_container.end() && iter->second == type.name )//the same obj
+            {
+                B2_container[iter->first] = iter->second;
+                S2_container.erase(iter);
+            }
+        }
+    }
+    
+    //If obj in B2 is also in S1, then delete
+    for (auto i = 0; i < crawler1.managedObjects.size(); i++)
+    {
+        auto &mo = crawler1.managedObjects[i];
+        if (!mo.isValueType)
+        {
+            auto &type = crawler1.snapshot->typeDescriptions->items[mo.typeIndex];
+            auto iter = B2_container.find(mo.address);
+            if( iter != B2_container.end() && iter->second == type.name )
+            {
+                B2_container.erase(iter);
+            }
+        }
+    }
+    
+    for(auto i = 0; i < managedObjects.size(); i++)
+    {
+        auto &mo = managedObjects[i];
+        if (!mo.isValueType)
+        {
+            auto &type = snapshot->typeDescriptions->items[mo.typeIndex];
+            auto iter = B2_container.find(mo.address);
+            if( iter != B2_container.end()&& iter->second == type.name )
+            {
+                mo.state = MS_allocated;
+            }else{
+                mo.state = MS_persistent;
+            }
+        }
+    }
+    
+    //S1: crawler1, S2:crawler2, S3:this
+    //Find S2 and S3 as B2
+    S2_container.clear();
+    B2_container.clear();
+    
+    for (auto i = 0; i < crawler2.snapshot->nativeObjects->size; i++)
+    {
+        auto &no = crawler2.snapshot->nativeObjects->items[i];
+        auto &type = crawler2.snapshot->nativeTypes->items[no.nativeTypeArrayIndex];
+        S2_container.insert(pair<address_t, string>(no.nativeObjectAddress, type.name));
+    }
+    
+    for (auto i = 0; i < snapshot->nativeObjects->size; i++)
+    {
+        auto &no = snapshot->nativeObjects->items[i];
+        auto &type = snapshot->nativeTypes->items[no.nativeTypeArrayIndex];
+        auto iter = S2_container.find(no.nativeObjectAddress);
+        if(iter != S2_container.end())
+        {
+            if( type.name ==  iter->second )//the same obj
+            {
+                B2_container[iter->first] = iter->second;
+                S2_container.erase(iter);
+            }
+        }
+    }
+    
+    //If obj in B2 is also in S1, then delete
+    for (auto i = 0; i < crawler1.snapshot->nativeObjects->size; i++)
+    {
+        auto &no = crawler1.snapshot->nativeObjects->items[i];
+        auto &type = crawler2.snapshot->nativeTypes->items[no.nativeTypeArrayIndex];
+        
+        auto iter = B2_container.find(no.nativeObjectAddress);
+        if( iter != B2_container.end())
+        {
+            if( type.name == iter->second )
+            {
+                B2_container.erase(iter);
+            }
+        }
+    }
+    
+    for(auto i = 0; i < snapshot->nativeObjects->size; i++)
+    {
+        auto &no = snapshot->nativeObjects->items[i];
+        auto iter = B2_container.find(no.nativeObjectAddress);
+        if (iter != B2_container.end())
+        {
+            no.state = MS_allocated;
+        }else
+        {
+            no.state = MS_persistent;
+        }
+    }
+}
 void MemorySnapshotCrawler::compare(MemorySnapshotCrawler &crawler)
 {
     map<address_t, int64_t> container;
@@ -1900,7 +2020,7 @@ int32_t MemorySnapshotCrawler::findTypeOfAddress(address_t address)
     return findTypeAtTypeAddress(vtable);
 }
 
-void MemorySnapshotCrawler::dumpRepeatedObjects(int32_t typeIndex, int32_t condition)
+void MemorySnapshotCrawler::dumpRepeatedObjects(int32_t typeIndex, int32_t condition, int32_t limit)
 {
     auto &type = snapshot->typeDescriptions->items[typeIndex];
     
@@ -1962,6 +2082,8 @@ void MemorySnapshotCrawler::dumpRepeatedObjects(int32_t typeIndex, int32_t condi
                   return ca.size() > cb.size();
               });
     auto isString = type.typeIndex == snapshot->managedTypeIndex.system_String;
+    
+    int print_count = 0;
     for (auto iter = target.begin(); iter != target.end(); iter++)
     {
         auto hash = *iter;
@@ -1969,8 +2091,16 @@ void MemorySnapshotCrawler::dumpRepeatedObjects(int32_t typeIndex, int32_t condi
         printf("\e[36m%s #%-2d", comma(memory.at(hash)).c_str(), (int32_t)children.size());
         
         bool extraComplate = false;
+        print_count = 0;
         for (auto n= children.begin(); n != children.end(); n++)
         {
+            if( limit > 0 && print_count >= limit)
+            {
+                break;
+            }else
+            {
+                print_count++;
+            }
             auto &mo = managedObjects[*n];
             auto size = 0;
             if (!extraComplate && isString) {printf(" \e[32m'%s'", getUTFString(mo.address, size, true).c_str());}
